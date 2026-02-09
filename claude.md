@@ -21,17 +21,20 @@ viewers, and download the structures as POSCAR and CIF files.
 
 ## File Structure
 crystal-viewer/
-├── CLAUDE.md          # This file
-├── app.py             # Main Streamlit app
-├── requirements.txt   # Python dependencies
+├── CLAUDE.md              # This file
+├── app.py                 # Main Streamlit app
+├── make_interfaces.py     # CLI interface generator (standalone)
+├── requirements.txt       # Python dependencies
 ├── utils/
-│   ├── init.py
-│   ├── mp_client.py   # Materials Project API wrapper
-│   ├── renderer.py    # 3D visualization functions
-│   └── exporters.py   # POSCAR/CIF export helpers
+│   ├── __init__.py
+│   ├── mp_client.py       # Materials Project API wrapper
+│   ├── renderer.py        # 3D visualization functions
+│   ├── exporters.py       # POSCAR/CIF export helpers
+│   └── interface_builder.py  # Coherent interface generation
+├── generated_interfaces/  # Output folder for generated POSCAR files (gitignored)
 ├── .streamlit/
-│   └── config.toml    # Streamlit theme config
-└── README.md          # User-facing documentation
+│   └── config.toml        # Streamlit theme config
+└── README.md              # User-facing documentation
 
 ## Important Notes
 - pymatgen Structure objects are NOT directly serializable by Streamlit cache.

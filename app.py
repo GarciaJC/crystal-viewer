@@ -8,6 +8,7 @@ from stmol import showmol
 from utils.mp_client import fetch_structure, search_by_formula
 from utils.renderer import STYLES, render_structure
 from utils.exporters import to_poscar, to_cif, to_zip
+from utils.interface_builder import get_terminations, build_interfaces
 
 
 def _fmt_ehull(val, fmt=".3f"):
@@ -103,6 +104,11 @@ for side in ("left", "right"):
     st.session_state.setdefault(f"{side}_style", "Ball & Stick")
     st.session_state.setdefault(f"{side}_supercell", False)
     st.session_state.setdefault(f"{side}_labels", False)
+
+# Interface builder state
+st.session_state.setdefault("ib_terminations", None)
+st.session_state.setdefault("ib_cib", None)
+st.session_state.setdefault("ib_generated", False)
 
 # ---------------------------------------------------------------------------
 # Sidebar
@@ -409,3 +415,170 @@ if left_data and right_data:
         mime="application/zip",
         use_container_width=True,
     )
+
+# ---------------------------------------------------------------------------
+# Interface Builder section (requires both structures loaded)
+# ---------------------------------------------------------------------------
+if left_data and right_data:
+    from pathlib import Path
+
+    st.divider()
+    st.subheader("Interface Builder")
+    st.markdown(
+        "Generate coherent interfaces between the two loaded structures "
+        "using pymatgen's `CoherentInterfaceBuilder`."
+    )
+
+    struct_sub = Structure.from_dict(left_data["structure_dict"])
+    struct_film = Structure.from_dict(right_data["structure_dict"])
+
+    # --- Interface parameters ------------------------------------------------
+    st.markdown("#### Parameters")
+
+    p1, p2 = st.columns(2)
+
+    with p1:
+        st.markdown(f"**Substrate:** {left_data['formula']} ({left_data['mp_id']})")
+        mc1, mc2, mc3 = st.columns(3)
+        sub_h = mc1.number_input("h", value=1, step=1, key="sub_h")
+        sub_k = mc2.number_input("k", value=0, step=1, key="sub_k")
+        sub_l = mc3.number_input("l", value=0, step=1, key="sub_l")
+        substrate_thickness = st.number_input(
+            "Substrate thickness (layers)", value=12, min_value=1, step=1, key="sub_thick"
+        )
+
+    with p2:
+        st.markdown(f"**Film:** {right_data['formula']} ({right_data['mp_id']})")
+        mc4, mc5, mc6 = st.columns(3)
+        film_h = mc4.number_input("h", value=1, step=1, key="film_h")
+        film_k = mc5.number_input("k", value=0, step=1, key="film_k")
+        film_l = mc6.number_input("l", value=0, step=1, key="film_l")
+        film_thickness = st.number_input(
+            "Film thickness (layers)", value=18, min_value=1, step=1, key="film_thick"
+        )
+
+    ap1, ap2 = st.columns(2)
+    max_area = ap1.number_input("Max area (ZSL)", value=800.0, min_value=10.0, step=50.0, key="max_area")
+    num_interfaces = ap2.number_input("Number of interfaces", value=10, min_value=1, max_value=100, step=1, key="num_ifaces")
+
+    substrate_miller = (int(sub_h), int(sub_k), int(sub_l))
+    film_miller = (int(film_h), int(film_k), int(film_l))
+
+    # --- Step 1: Find terminations -------------------------------------------
+    if st.button("Find Terminations", use_container_width=True, key="find_term_btn"):
+        try:
+            with st.spinner("Finding terminations..."):
+                cib, terminations = get_terminations(
+                    struct_sub, struct_film, substrate_miller, film_miller, max_area
+                )
+            if not terminations:
+                st.error("No terminations found for the given Miller indices.")
+            else:
+                st.session_state["ib_cib"] = cib
+                st.session_state["ib_terminations"] = terminations
+                st.session_state["ib_generated"] = False
+        except Exception as exc:
+            st.error(f"Error finding terminations: {exc}")
+
+    # --- Step 2: Select termination and generate -----------------------------
+    terminations = st.session_state["ib_terminations"]
+    if terminations:
+        term_labels = [
+            f"[{i}] Film: {t[0]}, Substrate: {t[1]}"
+            for i, t in enumerate(terminations)
+        ]
+        selected_label = st.selectbox("Select termination", term_labels, key="term_select")
+        selected_idx = term_labels.index(selected_label)
+        selected_termination = terminations[selected_idx]
+
+        if st.button("Generate Interfaces", use_container_width=True, type="primary", key="gen_iface_btn"):
+            cib = st.session_state["ib_cib"]
+            try:
+                with st.spinner(f"Generating up to {num_interfaces} interfaces..."):
+                    interfaces = build_interfaces(
+                        cib,
+                        selected_termination,
+                        film_thickness=film_thickness,
+                        substrate_thickness=substrate_thickness,
+                        num_interfaces=num_interfaces,
+                    )
+
+                if not interfaces:
+                    st.error("No interfaces were generated.")
+                else:
+                    # Save to generated_interfaces/ folder
+                    out_dir = Path("generated_interfaces")
+                    out_dir.mkdir(parents=True, exist_ok=True)
+
+                    sub_formula = left_data["formula"]
+                    film_formula = right_data["formula"]
+                    sub_m = "".join(str(m) for m in substrate_miller)
+                    film_m = "".join(str(m) for m in film_miller)
+
+                    for i, iface in enumerate(interfaces):
+                        fname = f"{sub_formula}_{film_formula}_{sub_m}-{film_m}_interface_{i:03d}.vasp"
+                        iface.to(str(out_dir / fname), fmt="poscar")
+
+                    st.session_state["ib_generated"] = True
+                    st.success(f"Generated {len(interfaces)} interfaces and saved to `generated_interfaces/`.")
+            except Exception as exc:
+                st.error(f"Error generating interfaces: {exc}")
+
+    # --- Step 3: Visualize generated interfaces ------------------------------
+    iface_dir = Path("generated_interfaces")
+    if iface_dir.exists():
+        vasp_files = sorted(iface_dir.glob("*.vasp"))
+        if vasp_files:
+            st.divider()
+            st.markdown("#### Generated Interfaces")
+
+            selected_file = st.selectbox(
+                "Select an interface to visualize",
+                vasp_files,
+                format_func=lambda f: f.name,
+                key="iface_file_select",
+            )
+
+            if selected_file:
+                iface_struct = Structure.from_file(str(selected_file))
+
+                # Info
+                ic1, ic2, ic3 = st.columns(3)
+                ic1.metric("Sites", iface_struct.num_sites)
+                ic2.metric("Volume", f"{iface_struct.lattice.volume:.2f} A\u00b3")
+                ic3.metric("Density", f"{iface_struct.density:.3f} g/cm\u00b3")
+
+                # Viewer controls
+                vc1, vc2, vc3 = st.columns(3)
+                iface_style = vc1.selectbox(
+                    "Representation",
+                    list(STYLES.keys()),
+                    key="iface_style",
+                )
+                iface_supercell = vc2.checkbox(
+                    "2\u00d72\u00d72 supercell",
+                    key="iface_supercell",
+                )
+                iface_labels = vc3.checkbox(
+                    "Atom labels",
+                    key="iface_labels",
+                )
+
+                sc = (2, 2, 2) if iface_supercell else (1, 1, 1)
+                view = render_structure(
+                    iface_struct,
+                    style_name=iface_style,
+                    supercell=sc,
+                    show_labels=iface_labels,
+                )
+                showmol(view, height=450, width=700)
+
+                # Download button for selected interface
+                st.download_button(
+                    "\u2b07 Download selected interface POSCAR",
+                    data=to_poscar(iface_struct),
+                    file_name=selected_file.name,
+                    mime="text/plain",
+                    key="dl_iface_poscar",
+                    use_container_width=True,
+                )
