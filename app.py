@@ -1,4 +1,4 @@
-"""Crystal Structure Comparator — Streamlit application."""
+"""Crystal Interface Generator — Streamlit application."""
 
 import streamlit as st
 from pymatgen.core import Structure
@@ -34,7 +34,7 @@ def _get_crystal_system(data: dict, struct: Structure) -> str:
 # Page configuration
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Crystal Structure Comparator",
+    page_title="Crystal Interface Generator",
     page_icon="\U0001f52c",
     layout="wide",
 )
@@ -153,6 +153,11 @@ structure is loaded. You can switch representation style, toggle a
 **Downloads** \u2014 POSCAR and CIF buttons export the conventional cell.
 When both structures are loaded a ZIP download with all files appears
 in the comparison section.
+
+**Interface Builder** \u2014 once both structures are loaded, scroll down
+to set Miller indices, layer thicknesses, and ZSL parameters. Click
+*Find Terminations*, pick one, then *Generate Interfaces*. Select any
+generated interface from the dropdown to visualize and download it.
 """
         )
 
@@ -162,12 +167,12 @@ in the comparison section.
 st.markdown(
     """
     <div class="app-header">
-        <h1>\U0001f52c Crystal Structure Comparator</h1>
+        <h1>\U0001f52c Crystal Interface Generator</h1>
         <p>
             Look up two crystal structures from the
             <a href="https://next-gen.materialsproject.org" target="_blank">Materials Project</a>
-            database, visualize them side-by-side in interactive 3D,
-            and download structure files.
+            database, visualize them in interactive 3D,
+            and generate coherent interfaces between them.
         </p>
     </div>
     """,

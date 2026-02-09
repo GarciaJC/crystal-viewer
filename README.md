@@ -1,24 +1,24 @@
-# Crystal Structure Comparator
+# Crystal Interface Generator
 
-A Streamlit web application for looking up, visualizing, and comparing crystal structures from the [Materials Project](https://next-gen.materialsproject.org) database. Enter two material IDs (or search by chemical formula), view them side-by-side in interactive 3D viewers, inspect key crystallographic properties, and download structure files in POSCAR and CIF formats.
-
-![Screenshot](screenshot.png)
+A Streamlit web application for looking up crystal structures from the [Materials Project](https://next-gen.materialsproject.org) database, visualizing them in interactive 3D, and generating coherent interfaces between two materials. Inspect crystallographic properties, tune Miller indices and layer thicknesses, and download structure files in POSCAR and CIF formats.
 
 ## Features
 
 - **Side-by-side 3D visualization** of two crystal structures using py3Dmol
 - **Search by MP ID or formula** with results sorted by thermodynamic stability
+- **Coherent interface generation** — set Miller indices, ZSL parameters, and layer thicknesses to build interfaces between substrate and film
+- **Interface visualization** — browse and visualize generated interfaces in an interactive 3D viewer
 - **Multiple rendering styles** — Ball & Stick, Space-filling, and Stick
 - **Supercell toggle** — switch between 1x1x1 and 2x2x2 views
 - **Atom labels** — overlay element symbols on atoms
 - **Property cards** — space group, crystal system, sites, energy above hull, volume, and density
 - **Comparison table** — side-by-side lattice parameters and metadata when both structures are loaded
-- **File export** — download individual POSCAR/CIF files or a ZIP bundle with all files
+- **File export** — download individual POSCAR/CIF files, a ZIP bundle, or generated interface POSCAR files
 
 ## Installation
 
 ```bash
-git clone https://github.com/<your-username>/crystal-viewer.git
+git clone https://github.com/GarciaJC/crystal-viewer.git
 cd crystal-viewer
 pip install -r requirements.txt
 streamlit run app.py
@@ -40,6 +40,12 @@ The app will open at [http://localhost:8501](http://localhost:8501).
 3. **Load structures** in the left and right columns using the *Look Up* button.
 4. **Adjust the 3D viewer** — change the representation style, enable a 2x2x2 supercell, or toggle atom labels.
 5. **Download files** — use the POSCAR/CIF buttons under each structure, or the *Download All as ZIP* button in the comparison section.
+6. **Generate interfaces** — once both structures are loaded, scroll to the Interface Builder section:
+   - Set Miller indices (h, k, l) for substrate and film surfaces.
+   - Adjust substrate/film thickness and max ZSL area.
+   - Click **Find Terminations**, select one from the dropdown.
+   - Click **Generate Interfaces** to create POSCAR files.
+   - Pick any generated interface from the dropdown to visualize and download it.
 
 ## Tech Stack
 
@@ -49,6 +55,7 @@ The app will open at [http://localhost:8501](http://localhost:8501).
 | 3D visualization | [py3Dmol](https://github.com/3dmol/3Dmol.js) + [stmol](https://github.com/napoles-uach/stmol) |
 | Data source | [Materials Project API](https://next-gen.materialsproject.org/api) via [mp-api](https://github.com/materialsproject/api) |
 | Structure handling | [pymatgen](https://pymatgen.org) |
+| Interface generation | [pymatgen CoherentInterfaceBuilder](https://pymatgen.org) |
 
 ## Deployment
 

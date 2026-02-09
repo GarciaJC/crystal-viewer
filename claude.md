@@ -1,9 +1,10 @@
-# Crystal Structure Comparator
+# Crystal Interface Generator
 
 ## Project Overview
 A Streamlit web app that lets users look up two crystal structures from the
-Materials Project database, visualize them side-by-side in interactive 3D
-viewers, and download the structures as POSCAR and CIF files.
+Materials Project database, visualize them in interactive 3D viewers, and
+generate coherent interfaces between them. Structures can be downloaded as
+POSCAR and CIF files, and generated interfaces are saved as POSCAR files.
 
 ## Tech Stack
 - **Framework**: Streamlit
