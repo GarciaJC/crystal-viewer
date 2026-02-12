@@ -111,6 +111,12 @@ st.session_state.setdefault("ib_terminations", None)
 st.session_state.setdefault("ib_cib", None)
 st.session_state.setdefault("ib_generated", False)
 st.session_state.setdefault("sa_matches", None)
+st.session_state.setdefault("sub_h", 1)
+st.session_state.setdefault("sub_k", 0)
+st.session_state.setdefault("sub_l", 0)
+st.session_state.setdefault("film_h", 1)
+st.session_state.setdefault("film_k", 0)
+st.session_state.setdefault("film_l", 0)
 
 # ---------------------------------------------------------------------------
 # Sidebar
@@ -523,9 +529,9 @@ if left_data and right_data:
     with p1:
         st.markdown(f"**Substrate:** {left_data['formula']} ({left_data['mp_id']})")
         mc1, mc2, mc3 = st.columns(3)
-        sub_h = mc1.number_input("h", value=1, step=1, key="sub_h")
-        sub_k = mc2.number_input("k", value=0, step=1, key="sub_k")
-        sub_l = mc3.number_input("l", value=0, step=1, key="sub_l")
+        sub_h = mc1.number_input("h", step=1, key="sub_h")
+        sub_k = mc2.number_input("k", step=1, key="sub_k")
+        sub_l = mc3.number_input("l", step=1, key="sub_l")
         substrate_thickness = st.number_input(
             "Substrate thickness (layers)", value=12, min_value=1, step=1, key="sub_thick"
         )
@@ -533,9 +539,9 @@ if left_data and right_data:
     with p2:
         st.markdown(f"**Film:** {right_data['formula']} ({right_data['mp_id']})")
         mc4, mc5, mc6 = st.columns(3)
-        film_h = mc4.number_input("h", value=1, step=1, key="film_h")
-        film_k = mc5.number_input("k", value=0, step=1, key="film_k")
-        film_l = mc6.number_input("l", value=0, step=1, key="film_l")
+        film_h = mc4.number_input("h", step=1, key="film_h")
+        film_k = mc5.number_input("k", step=1, key="film_k")
+        film_l = mc6.number_input("l", step=1, key="film_l")
         film_thickness = st.number_input(
             "Film thickness (layers)", value=18, min_value=1, step=1, key="film_thick"
         )
