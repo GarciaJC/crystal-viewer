@@ -59,14 +59,24 @@ def get_terminations(
     return cib, cib.terminations
 
 
+def count_zsl_matches(cib: CoherentInterfaceBuilder) -> int:
+    """Return the number of ZSL matches already computed by the builder."""
+    return len(cib.zsl_matches)
+
+
 def build_interfaces(
     cib: CoherentInterfaceBuilder,
     termination: tuple,
     film_thickness: int = 18,
     substrate_thickness: int = 12,
-    num_interfaces: int = 10,
+    num_interfaces: int | None = 10,
+    progress_callback=None,
 ) -> list:
     """Generate up to *num_interfaces* coherent interfaces.
+
+    If *num_interfaces* is None, generate all available interfaces.
+    *progress_callback*, if provided, is called with (current, total) after
+    each interface is built.
 
     Returns a list of pymatgen Structure objects.
     """
@@ -75,9 +85,12 @@ def build_interfaces(
         film_thickness=film_thickness,
         substrate_thickness=substrate_thickness,
     )
+    total = count_zsl_matches(cib)
     interfaces = []
     for iface in iterator:
         interfaces.append(iface)
-        if len(interfaces) >= num_interfaces:
+        if progress_callback:
+            progress_callback(len(interfaces), total)
+        if num_interfaces is not None and len(interfaces) >= num_interfaces:
             break
     return interfaces

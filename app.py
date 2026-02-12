@@ -9,7 +9,7 @@ from stmol import showmol
 from utils.mp_client import fetch_structure, search_by_formula
 from utils.renderer import STYLES, render_structure
 from utils.exporters import to_poscar, to_cif, to_zip
-from utils.interface_builder import analyze_substrates, get_terminations, build_interfaces
+from utils.interface_builder import analyze_substrates, get_terminations, build_interfaces, count_zsl_matches
 
 
 def _fmt_ehull(val, fmt=".3f"):
@@ -540,9 +540,7 @@ if left_data and right_data:
             "Film thickness (layers)", value=18, min_value=1, step=1, key="film_thick"
         )
 
-    ap1, ap2 = st.columns(2)
-    max_area = ap1.number_input("Max area (ZSL)", value=800.0, min_value=10.0, step=50.0, key="max_area")
-    num_interfaces = ap2.number_input("Number of interfaces", value=10, min_value=1, max_value=100, step=1, key="num_ifaces")
+    max_area = st.number_input("Max area (ZSL)", value=800.0, min_value=10.0, step=50.0, key="max_area")
 
     substrate_miller = (int(sub_h), int(sub_k), int(sub_l))
     film_miller = (int(film_h), int(film_k), int(film_l))
@@ -566,6 +564,9 @@ if left_data and right_data:
     # --- Step 2: Select termination and generate -----------------------------
     terminations = st.session_state["ib_terminations"]
     if terminations:
+        cib = st.session_state["ib_cib"]
+        total_matches = count_zsl_matches(cib)
+
         term_labels = [
             f"[{i}] Film: {t[0]}, Substrate: {t[1]}"
             for i, t in enumerate(terminations)
@@ -574,17 +575,48 @@ if left_data and right_data:
         selected_idx = term_labels.index(selected_label)
         selected_termination = terminations[selected_idx]
 
-        if st.button("Generate Interfaces", use_container_width=True, type="primary", key="gen_iface_btn"):
-            cib = st.session_state["ib_cib"]
+        st.info(f"**{total_matches}** ZSL matches available for this configuration.")
+
+        gen_c1, gen_c2 = st.columns([3, 1])
+        num_interfaces = gen_c1.number_input(
+            "Number of interfaces to generate",
+            value=min(10, total_matches),
+            min_value=1,
+            max_value=total_matches,
+            step=1,
+            key="num_ifaces",
+        )
+        generate_all = gen_c2.checkbox("Generate all", key="gen_all")
+
+        if generate_all:
+            num_to_generate = None  # signals "all" to build_interfaces
+            label = f"all {total_matches}"
+        else:
+            num_to_generate = num_interfaces
+            label = str(num_interfaces)
+
+        if st.button(
+            f"Generate Interfaces ({label})",
+            use_container_width=True,
+            type="primary",
+            key="gen_iface_btn",
+        ):
             try:
-                with st.spinner(f"Generating up to {num_interfaces} interfaces..."):
-                    interfaces = build_interfaces(
-                        cib,
-                        selected_termination,
-                        film_thickness=film_thickness,
-                        substrate_thickness=substrate_thickness,
-                        num_interfaces=num_interfaces,
-                    )
+                progress_bar = st.progress(0, text="Generating interfaces...")
+
+                def _update_progress(current, total):
+                    frac = current / total if total else 1.0
+                    progress_bar.progress(frac, text=f"Building interface {current}/{total}...")
+
+                interfaces = build_interfaces(
+                    cib,
+                    selected_termination,
+                    film_thickness=film_thickness,
+                    substrate_thickness=substrate_thickness,
+                    num_interfaces=num_to_generate,
+                    progress_callback=_update_progress,
+                )
+                progress_bar.empty()
 
                 if not interfaces:
                     st.error("No interfaces were generated.")
