@@ -781,7 +781,7 @@ if left_data and right_data:
 
             hover_text = [
                 f"<b>{fn}</b><br>"
-                f"Energy: {e:.4f} eV<br>"
+                f"Energy: {e:.4f} eV/atom<br>"
                 f"Strain: {s:.6f}<br>"
                 f"Area: {a:.1f} \u00c5\u00b2"
                 for fn, e, s, a in zip(filenames, energies, strains, areas)
@@ -793,10 +793,8 @@ if left_data and right_data:
                 mode="markers",
                 marker=dict(
                     size=sizes,
-                    color=energies,
-                    colorscale="Viridis",
-                    colorbar=dict(title="Energy (eV)"),
-                    line=dict(width=1, color="DarkSlateGrey"),
+                    color="rgba(0,0,0,0)",
+                    line=dict(width=2, color="black"),
                 ),
                 text=hover_text,
                 hoverinfo="text",
@@ -804,7 +802,7 @@ if left_data and right_data:
             fig.update_layout(
                 title="Interface Energy vs Strain",
                 xaxis_title="Von Mises Strain",
-                yaxis_title="MACE Energy (eV)",
+                yaxis_title="MACE Energy (eV/atom)",
                 template="plotly_white",
                 height=500,
             )
@@ -819,5 +817,32 @@ if left_data and right_data:
                 file_name="energy_vs_strain.html",
                 mime="text/html",
                 key="dl_energy_plot",
+                use_container_width=True,
+            )
+
+            # Data table
+            import pandas as pd
+
+            df_results = pd.DataFrame({
+                "Filename": filenames,
+                "Energy (eV/atom)": [f"{e:.4f}" for e in energies],
+                "Von Mises Strain": [f"{s:.6f}" for s in strains],
+                "Match Area (\u00c5\u00b2)": [f"{a:.1f}" for a in areas],
+            })
+            st.dataframe(df_results, use_container_width=True, hide_index=True)
+
+            # CSV download
+            csv_data = pd.DataFrame({
+                "Filename": filenames,
+                "Energy (eV/atom)": energies,
+                "Von Mises Strain": strains,
+                "Match Area (A^2)": areas,
+            }).to_csv(index=False)
+            st.download_button(
+                "\u2b07 Download data (CSV)",
+                data=csv_data,
+                file_name="energy_vs_strain.csv",
+                mime="text/csv",
+                key="dl_energy_csv",
                 use_container_width=True,
             )

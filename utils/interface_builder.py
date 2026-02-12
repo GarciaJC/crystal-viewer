@@ -57,7 +57,7 @@ def compute_interface_energies(
     """Compute MACE potential energies for a list of interface structures.
 
     Each entry in *interface_dicts* must have a ``"structure"`` key containing
-    a pymatgen Structure.  Returns a list of energies in eV (same order).
+    a pymatgen Structure.  Returns a list of energies in eV/atom (same order).
     """
     from mace.calculators import mace_mp
     from pymatgen.io.ase import AseAtomsAdaptor
@@ -69,7 +69,8 @@ def compute_interface_energies(
     for i, entry in enumerate(interface_dicts):
         atoms = adaptor.get_atoms(entry["structure"])
         atoms.calc = calc
-        energies.append(float(atoms.get_potential_energy()))
+        energy = float(atoms.get_potential_energy())
+        energies.append(energy / len(atoms))
         if progress_callback:
             progress_callback(i + 1, total)
     return energies
