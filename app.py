@@ -8,7 +8,7 @@ from stmol import showmol
 from utils.mp_client import fetch_structure, search_by_formula
 from utils.renderer import STYLES, render_structure
 from utils.exporters import to_poscar, to_cif, to_zip
-from utils.interface_builder import get_terminations, build_interfaces
+from utils.interface_builder import analyze_substrates, get_terminations, build_interfaces
 
 
 def _fmt_ehull(val, fmt=".3f"):
@@ -109,6 +109,7 @@ for side in ("left", "right"):
 st.session_state.setdefault("ib_terminations", None)
 st.session_state.setdefault("ib_cib", None)
 st.session_state.setdefault("ib_generated", False)
+st.session_state.setdefault("sa_matches", None)
 
 # ---------------------------------------------------------------------------
 # Sidebar
@@ -437,6 +438,77 @@ if left_data and right_data:
     struct_sub = Structure.from_dict(left_data["structure_dict"])
     struct_film = Structure.from_dict(right_data["structure_dict"])
 
+    # --- Substrate Analysis --------------------------------------------------
+    st.markdown("#### Find Best Surface Matches")
+    st.markdown(
+        "Screen Miller index combinations to find the lowest-strain "
+        "substrate/film pairings using pymatgen's `SubstrateAnalyzer`."
+    )
+
+    sa_c1, sa_c2, sa_c3 = st.columns(3)
+    sa_film_max = sa_c1.number_input(
+        "Film max Miller index", value=1, min_value=1, max_value=3, step=1, key="sa_film_max"
+    )
+    sa_sub_max = sa_c2.number_input(
+        "Substrate max Miller index", value=1, min_value=1, max_value=3, step=1, key="sa_sub_max"
+    )
+    sa_max_area = sa_c3.number_input(
+        "Max area (ZSL)", value=400.0, min_value=10.0, step=50.0, key="sa_max_area"
+    )
+
+    if st.button("Analyze Substrate Matches", use_container_width=True, key="sa_btn"):
+        try:
+            with st.spinner("Screening Miller index combinations..."):
+                matches = analyze_substrates(
+                    struct_sub, struct_film,
+                    film_max_miller=sa_film_max,
+                    substrate_max_miller=sa_sub_max,
+                    max_area=sa_max_area,
+                )
+            if not matches:
+                st.warning("No matches found. Try increasing max Miller index or max area.")
+            else:
+                st.session_state["sa_matches"] = matches
+        except Exception as exc:
+            st.error(f"Error analyzing substrates: {exc}")
+
+    sa_matches = st.session_state["sa_matches"]
+    if sa_matches:
+        import pandas as pd
+
+        df = pd.DataFrame([
+            {
+                "Film (hkl)": str(m["film_miller"]),
+                "Substrate (hkl)": str(m["substrate_miller"]),
+                "Von Mises Strain": f"{m['von_mises_strain']:.6f}",
+                "Match Area (\u00c5\u00b2)": f"{m['match_area']:.1f}",
+            }
+            for m in sa_matches
+        ])
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        match_labels = [
+            f"Film {m['film_miller']}  |  Sub {m['substrate_miller']}  |  "
+            f"strain {m['von_mises_strain']:.6f}  |  area {m['match_area']:.1f}"
+            for m in sa_matches
+        ]
+        selected_match_label = st.selectbox(
+            "Use a match to populate Miller indices below",
+            match_labels,
+            key="sa_match_select",
+        )
+        selected_match_idx = match_labels.index(selected_match_label)
+        selected_match = sa_matches[selected_match_idx]
+
+        # Provide defaults from the selected match
+        default_sub_h, default_sub_k, default_sub_l = selected_match["substrate_miller"]
+        default_film_h, default_film_k, default_film_l = selected_match["film_miller"]
+    else:
+        default_sub_h, default_sub_k, default_sub_l = 1, 0, 0
+        default_film_h, default_film_k, default_film_l = 1, 0, 0
+
+    st.divider()
+
     # --- Interface parameters ------------------------------------------------
     st.markdown("#### Parameters")
 
@@ -445,9 +517,9 @@ if left_data and right_data:
     with p1:
         st.markdown(f"**Substrate:** {left_data['formula']} ({left_data['mp_id']})")
         mc1, mc2, mc3 = st.columns(3)
-        sub_h = mc1.number_input("h", value=1, step=1, key="sub_h")
-        sub_k = mc2.number_input("k", value=0, step=1, key="sub_k")
-        sub_l = mc3.number_input("l", value=0, step=1, key="sub_l")
+        sub_h = mc1.number_input("h", value=default_sub_h, step=1, key="sub_h")
+        sub_k = mc2.number_input("k", value=default_sub_k, step=1, key="sub_k")
+        sub_l = mc3.number_input("l", value=default_sub_l, step=1, key="sub_l")
         substrate_thickness = st.number_input(
             "Substrate thickness (layers)", value=12, min_value=1, step=1, key="sub_thick"
         )
@@ -455,9 +527,9 @@ if left_data and right_data:
     with p2:
         st.markdown(f"**Film:** {right_data['formula']} ({right_data['mp_id']})")
         mc4, mc5, mc6 = st.columns(3)
-        film_h = mc4.number_input("h", value=1, step=1, key="film_h")
-        film_k = mc5.number_input("k", value=0, step=1, key="film_k")
-        film_l = mc6.number_input("l", value=0, step=1, key="film_l")
+        film_h = mc4.number_input("h", value=default_film_h, step=1, key="film_h")
+        film_k = mc5.number_input("k", value=default_film_k, step=1, key="film_k")
+        film_l = mc6.number_input("l", value=default_film_l, step=1, key="film_l")
         film_thickness = st.number_input(
             "Film thickness (layers)", value=18, min_value=1, step=1, key="film_thick"
         )

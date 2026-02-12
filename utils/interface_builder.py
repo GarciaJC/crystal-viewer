@@ -1,8 +1,39 @@
 """Interface generation utilities using pymatgen's CoherentInterfaceBuilder."""
 
 from pymatgen.analysis.interfaces.coherent_interfaces import CoherentInterfaceBuilder
+from pymatgen.analysis.interfaces.substrate_analyzer import SubstrateAnalyzer
 from pymatgen.analysis.interfaces.zsl import ZSLGenerator
 from pymatgen.core.structure import Structure
+
+
+def analyze_substrates(
+    substrate: Structure,
+    film: Structure,
+    film_max_miller: int = 1,
+    substrate_max_miller: int = 1,
+    max_area: float = 400,
+) -> list[dict]:
+    """Screen all Miller index combinations and return matches sorted by strain.
+
+    Returns a list of dicts with keys: film_miller, substrate_miller,
+    von_mises_strain, match_area.
+    """
+    sa = SubstrateAnalyzer(
+        film_max_miller=film_max_miller,
+        substrate_max_miller=substrate_max_miller,
+        max_area=max_area,
+    )
+    matches = list(sa.calculate(film, substrate, lowest=True))
+    results = []
+    for m in matches:
+        results.append({
+            "film_miller": m.film_miller,
+            "substrate_miller": m.substrate_miller,
+            "von_mises_strain": m.von_mises_strain,
+            "match_area": m.match_area,
+        })
+    results.sort(key=lambda r: r["von_mises_strain"])
+    return results
 
 
 def get_terminations(
