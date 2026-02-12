@@ -1,5 +1,6 @@
 """Crystal Interface Generator — Streamlit application."""
 
+import numpy as np
 import streamlit as st
 from pymatgen.core import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
@@ -492,20 +493,25 @@ if left_data and right_data:
             f"strain {m['von_mises_strain']:.6f}  |  area {m['match_area']:.1f}"
             for m in sa_matches
         ]
-        selected_match_label = st.selectbox(
+
+        def _on_match_selected():
+            idx = match_labels.index(st.session_state["sa_match_select"])
+            m = sa_matches[idx]
+            sh, sk, sl = m["substrate_miller"]
+            fh, fk, fl = m["film_miller"]
+            st.session_state["sub_h"] = sh
+            st.session_state["sub_k"] = sk
+            st.session_state["sub_l"] = sl
+            st.session_state["film_h"] = fh
+            st.session_state["film_k"] = fk
+            st.session_state["film_l"] = fl
+
+        st.selectbox(
             "Use a match to populate Miller indices below",
             match_labels,
             key="sa_match_select",
+            on_change=_on_match_selected,
         )
-        selected_match_idx = match_labels.index(selected_match_label)
-        selected_match = sa_matches[selected_match_idx]
-
-        # Provide defaults from the selected match
-        default_sub_h, default_sub_k, default_sub_l = selected_match["substrate_miller"]
-        default_film_h, default_film_k, default_film_l = selected_match["film_miller"]
-    else:
-        default_sub_h, default_sub_k, default_sub_l = 1, 0, 0
-        default_film_h, default_film_k, default_film_l = 1, 0, 0
 
     st.divider()
 
@@ -517,9 +523,9 @@ if left_data and right_data:
     with p1:
         st.markdown(f"**Substrate:** {left_data['formula']} ({left_data['mp_id']})")
         mc1, mc2, mc3 = st.columns(3)
-        sub_h = mc1.number_input("h", value=default_sub_h, step=1, key="sub_h")
-        sub_k = mc2.number_input("k", value=default_sub_k, step=1, key="sub_k")
-        sub_l = mc3.number_input("l", value=default_sub_l, step=1, key="sub_l")
+        sub_h = mc1.number_input("h", value=1, step=1, key="sub_h")
+        sub_k = mc2.number_input("k", value=0, step=1, key="sub_k")
+        sub_l = mc3.number_input("l", value=0, step=1, key="sub_l")
         substrate_thickness = st.number_input(
             "Substrate thickness (layers)", value=12, min_value=1, step=1, key="sub_thick"
         )
@@ -527,9 +533,9 @@ if left_data and right_data:
     with p2:
         st.markdown(f"**Film:** {right_data['formula']} ({right_data['mp_id']})")
         mc4, mc5, mc6 = st.columns(3)
-        film_h = mc4.number_input("h", value=default_film_h, step=1, key="film_h")
-        film_k = mc5.number_input("k", value=default_film_k, step=1, key="film_k")
-        film_l = mc6.number_input("l", value=default_film_l, step=1, key="film_l")
+        film_h = mc4.number_input("h", value=1, step=1, key="film_h")
+        film_k = mc5.number_input("k", value=0, step=1, key="film_k")
+        film_l = mc6.number_input("l", value=0, step=1, key="film_l")
         film_thickness = st.number_input(
             "Film thickness (layers)", value=18, min_value=1, step=1, key="film_thick"
         )
@@ -620,10 +626,14 @@ if left_data and right_data:
                 iface_struct = Structure.from_file(str(selected_file))
 
                 # Info
+                lattice = iface_struct.lattice
+                # Cross-section area: |a x b| (area of the ab plane)
+                area = np.linalg.norm(np.cross(lattice.matrix[0], lattice.matrix[1]))
+
                 ic1, ic2, ic3 = st.columns(3)
                 ic1.metric("Sites", iface_struct.num_sites)
-                ic2.metric("Volume", f"{iface_struct.lattice.volume:.2f} A\u00b3")
-                ic3.metric("Density", f"{iface_struct.density:.3f} g/cm\u00b3")
+                ic2.metric("Volume", f"{lattice.volume:.2f} \u00c5\u00b3")
+                ic3.metric("Interface Area", f"{area:.2f} \u00c5\u00b2")
 
                 # Viewer controls
                 vc1, vc2, vc3 = st.columns(3)
