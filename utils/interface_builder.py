@@ -71,14 +71,15 @@ def build_interfaces(
     substrate_thickness: int = 12,
     num_interfaces: int | None = 10,
     progress_callback=None,
-) -> list:
+) -> list[dict]:
     """Generate up to *num_interfaces* coherent interfaces.
 
     If *num_interfaces* is None, generate all available interfaces.
     *progress_callback*, if provided, is called with (current, total) after
     each interface is built.
 
-    Returns a list of pymatgen Structure objects.
+    Returns a list of dicts with keys: "structure" (Structure) and
+    "match_area" (float).
     """
     iterator = cib.get_interfaces(
         termination=termination,
@@ -86,11 +87,13 @@ def build_interfaces(
         substrate_thickness=substrate_thickness,
     )
     total = count_zsl_matches(cib)
-    interfaces = []
-    for iface in iterator:
-        interfaces.append(iface)
+    zsl_matches = cib.zsl_matches
+    results = []
+    for i, iface in enumerate(iterator):
+        area = zsl_matches[i].match_area if i < len(zsl_matches) else 0.0
+        results.append({"structure": iface, "match_area": area})
         if progress_callback:
-            progress_callback(len(interfaces), total)
-        if num_interfaces is not None and len(interfaces) >= num_interfaces:
+            progress_callback(len(results), total)
+        if num_interfaces is not None and len(results) >= num_interfaces:
             break
-    return interfaces
+    return results

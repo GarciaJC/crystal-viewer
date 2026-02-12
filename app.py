@@ -630,9 +630,10 @@ if left_data and right_data:
                     sub_m = "".join(str(m) for m in substrate_miller)
                     film_m = "".join(str(m) for m in film_miller)
 
-                    for i, iface in enumerate(interfaces):
-                        fname = f"{sub_formula}_{film_formula}_{sub_m}-{film_m}_interface_{i:03d}.vasp"
-                        iface.to(str(out_dir / fname), fmt="poscar")
+                    for i, entry in enumerate(interfaces):
+                        area_int = round(entry["match_area"])
+                        fname = f"{sub_formula}_{film_formula}_{sub_m}-{film_m}_area{area_int}_{i:03d}.vasp"
+                        entry["structure"].to(str(out_dir / fname), fmt="poscar")
 
                     st.session_state["ib_generated"] = True
                     st.success(f"Generated {len(interfaces)} interfaces and saved to `generated_interfaces/`.")
