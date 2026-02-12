@@ -9,7 +9,13 @@ from stmol import showmol
 from utils.mp_client import fetch_structure, search_by_formula
 from utils.renderer import STYLES, render_structure
 from utils.exporters import to_poscar, to_cif, to_zip
-from utils.interface_builder import analyze_substrates, get_terminations, build_interfaces, count_zsl_matches
+from utils.interface_builder import (
+    analyze_substrates,
+    get_terminations,
+    build_interfaces,
+    count_zsl_matches,
+    compute_interface_energies,
+)
 
 
 def _fmt_ehull(val, fmt=".3f"):
@@ -111,6 +117,8 @@ st.session_state.setdefault("ib_terminations", None)
 st.session_state.setdefault("ib_cib", None)
 st.session_state.setdefault("ib_generated", False)
 st.session_state.setdefault("sa_matches", None)
+st.session_state.setdefault("ib_energies", None)
+st.session_state.setdefault("ib_interfaces_data", None)
 st.session_state.setdefault("sub_h", 1)
 st.session_state.setdefault("sub_k", 0)
 st.session_state.setdefault("sub_l", 0)
@@ -621,6 +629,8 @@ if left_data and right_data:
                     substrate_thickness=substrate_thickness,
                     num_interfaces=num_to_generate,
                     progress_callback=_update_progress,
+                    film_structure=struct_film,
+                    film_miller=film_miller,
                 )
                 progress_bar.empty()
 
@@ -636,11 +646,24 @@ if left_data and right_data:
                     sub_m = "".join(str(m) for m in substrate_miller)
                     film_m = "".join(str(m) for m in film_miller)
 
+                    filenames = []
                     for i, entry in enumerate(interfaces):
                         area_int = round(entry["match_area"])
                         fname = f"{sub_formula}_{film_formula}_{sub_m}-{film_m}_area{area_int}_{i:03d}.vasp"
                         entry["structure"].to(str(out_dir / fname), fmt="poscar")
+                        filenames.append(fname)
 
+                    # Store interface metadata for energy analysis
+                    st.session_state["ib_interfaces_data"] = [
+                        {
+                            "filename": filenames[i],
+                            "structure_dict": entry["structure"].as_dict(),
+                            "match_area": entry["match_area"],
+                            "von_mises_strain": entry["von_mises_strain"],
+                        }
+                        for i, entry in enumerate(interfaces)
+                    ]
+                    st.session_state["ib_energies"] = None  # clear old energies
                     st.session_state["ib_generated"] = True
                     st.success(f"Generated {len(interfaces)} interfaces and saved to `generated_interfaces/`.")
             except Exception as exc:
@@ -708,3 +731,93 @@ if left_data and right_data:
                     key="dl_iface_poscar",
                     use_container_width=True,
                 )
+
+    # --- MACE Energy Calculation & Energy vs Strain Plot ---------------------
+    iface_data = st.session_state.get("ib_interfaces_data")
+    if iface_data:
+        st.divider()
+        st.markdown("#### MACE Energy Analysis")
+        st.markdown(
+            "Compute potential energies for all generated interfaces using the "
+            "[MACE](https://github.com/ACEsuit/mace) universal ML interatomic potential."
+        )
+
+        if st.button("Compute Energies (MACE)", use_container_width=True, type="primary", key="mace_btn"):
+            try:
+                # Reconstruct Structure objects for energy calculation
+                iface_structs = [
+                    {"structure": Structure.from_dict(d["structure_dict"])}
+                    for d in iface_data
+                ]
+                progress_bar = st.progress(0, text="Computing MACE energies...")
+
+                def _energy_progress(current, total):
+                    frac = current / total if total else 1.0
+                    progress_bar.progress(frac, text=f"MACE energy {current}/{total}...")
+
+                energies = compute_interface_energies(
+                    iface_structs, device="cpu", progress_callback=_energy_progress,
+                )
+                progress_bar.empty()
+                st.session_state["ib_energies"] = energies
+                st.success(f"Computed energies for {len(energies)} interfaces.")
+            except Exception as exc:
+                st.error(f"Error computing MACE energies: {exc}")
+
+        energies = st.session_state.get("ib_energies")
+        if energies and iface_data:
+            import plotly.graph_objects as go
+
+            strains = [d["von_mises_strain"] for d in iface_data]
+            areas = [d["match_area"] for d in iface_data]
+            filenames = [d["filename"] for d in iface_data]
+
+            # Scale marker sizes: map area to 8-40 px range
+            min_a, max_a = min(areas), max(areas)
+            if max_a > min_a:
+                sizes = [8 + 32 * (a - min_a) / (max_a - min_a) for a in areas]
+            else:
+                sizes = [20] * len(areas)
+
+            hover_text = [
+                f"<b>{fn}</b><br>"
+                f"Energy: {e:.4f} eV<br>"
+                f"Strain: {s:.6f}<br>"
+                f"Area: {a:.1f} \u00c5\u00b2"
+                for fn, e, s, a in zip(filenames, energies, strains, areas)
+            ]
+
+            fig = go.Figure(data=go.Scatter(
+                x=strains,
+                y=energies,
+                mode="markers",
+                marker=dict(
+                    size=sizes,
+                    color=energies,
+                    colorscale="Viridis",
+                    colorbar=dict(title="Energy (eV)"),
+                    line=dict(width=1, color="DarkSlateGrey"),
+                ),
+                text=hover_text,
+                hoverinfo="text",
+            ))
+            fig.update_layout(
+                title="Interface Energy vs Strain",
+                xaxis_title="Von Mises Strain",
+                yaxis_title="MACE Energy (eV)",
+                template="plotly_white",
+                height=500,
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Download interactive HTML plot
+            html_plot = fig.to_html(include_plotlyjs=True, full_html=True)
+            st.download_button(
+                "\u2b07 Download interactive plot (HTML)",
+                data=html_plot,
+                file_name="energy_vs_strain.html",
+                mime="text/html",
+                key="dl_energy_plot",
+                use_container_width=True,
+            )

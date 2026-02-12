@@ -1,9 +1,11 @@
 """Interface generation utilities using pymatgen's CoherentInterfaceBuilder."""
 
+from pymatgen.analysis.elasticity.strain import Deformation
 from pymatgen.analysis.interfaces.coherent_interfaces import CoherentInterfaceBuilder
 from pymatgen.analysis.interfaces.substrate_analyzer import SubstrateAnalyzer
 from pymatgen.analysis.interfaces.zsl import ZSLGenerator
 from pymatgen.core.structure import Structure
+from pymatgen.core.surface import SlabGenerator
 
 
 def analyze_substrates(
@@ -34,6 +36,43 @@ def analyze_substrates(
         })
     results.sort(key=lambda r: r["von_mises_strain"])
     return results
+
+
+def compute_interface_strain(match, film_structure: Structure, film_miller: tuple) -> float:
+    """Compute the Von Mises strain for a single ZSL match.
+
+    Uses the match transformation matrix to derive the Green-Lagrange strain
+    tensor, then returns the scalar Von Mises strain.
+    """
+    deformation = Deformation(match.match_transformation)
+    strain = deformation.green_lagrange_strain
+    return float(strain.von_mises_strain)
+
+
+def compute_interface_energies(
+    interface_dicts: list[dict],
+    device: str = "cpu",
+    progress_callback=None,
+) -> list[float]:
+    """Compute MACE potential energies for a list of interface structures.
+
+    Each entry in *interface_dicts* must have a ``"structure"`` key containing
+    a pymatgen Structure.  Returns a list of energies in eV (same order).
+    """
+    from mace.calculators import mace_mp
+    from pymatgen.io.ase import AseAtomsAdaptor
+
+    calc = mace_mp(model="medium", dispersion=False, default_dtype="float32", device=device)
+    adaptor = AseAtomsAdaptor()
+    energies = []
+    total = len(interface_dicts)
+    for i, entry in enumerate(interface_dicts):
+        atoms = adaptor.get_atoms(entry["structure"])
+        atoms.calc = calc
+        energies.append(float(atoms.get_potential_energy()))
+        if progress_callback:
+            progress_callback(i + 1, total)
+    return energies
 
 
 def get_terminations(
@@ -71,6 +110,8 @@ def build_interfaces(
     substrate_thickness: int = 12,
     num_interfaces: int | None = 10,
     progress_callback=None,
+    film_structure: Structure | None = None,
+    film_miller: tuple | None = None,
 ) -> list[dict]:
     """Generate up to *num_interfaces* coherent interfaces.
 
@@ -78,8 +119,8 @@ def build_interfaces(
     *progress_callback*, if provided, is called with (current, total) after
     each interface is built.
 
-    Returns a list of dicts with keys: "structure" (Structure) and
-    "match_area" (float).
+    Returns a list of dicts with keys: "structure" (Structure),
+    "match_area" (float), and "von_mises_strain" (float).
     """
     iterator = cib.get_interfaces(
         termination=termination,
@@ -91,7 +132,13 @@ def build_interfaces(
     results = []
     for i, iface in enumerate(iterator):
         area = zsl_matches[i].match_area if i < len(zsl_matches) else 0.0
-        results.append({"structure": iface, "match_area": area})
+        strain = 0.0
+        if film_structure is not None and film_miller is not None and i < len(zsl_matches):
+            try:
+                strain = compute_interface_strain(zsl_matches[i], film_structure, film_miller)
+            except Exception:
+                strain = 0.0
+        results.append({"structure": iface, "match_area": area, "von_mises_strain": strain})
         if progress_callback:
             progress_callback(len(results), total)
         if num_interfaces is not None and len(results) >= num_interfaces:
